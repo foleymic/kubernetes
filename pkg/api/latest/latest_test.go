@@ -132,6 +132,18 @@ var apiObjectFuzzer = fuzz.New().NilChance(.5).NumElements(1, 1).Funcs(
 			c.RandString(): c.RandString(),
 		}
 	},
+	func(j *internal.ServiceSpec, c fuzz.Continue) {
+		j.Port = int(c.RandUint64())
+		protocolOptions := []internal.Protocol{internal.ProtocolTCP, internal.ProtocolUDP}
+		j.Protocol = protocolOptions[c.Rand.Intn(len(protocolOptions))]
+		c.Fuzz(&j.Selector)
+		j.PortalIP = "127.0.0.1"
+		j.ProxyPort = int(c.RandUint64())
+		j.CreateExternalLoadBalancer = c.RandBool()
+		//PublicIPs []string `json:"publicIPs,omitempty" yaml:"publicIPs,omitempty"`
+		j.ContainerPort.IntVal = 0
+		j.ContainerPort.StrVal = c.RandString()
+	},
 )
 
 func TestInternalRoundTrip(t *testing.T) {
