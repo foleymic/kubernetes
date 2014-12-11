@@ -32,14 +32,16 @@ import (
 )
 
 type serviceInfo struct {
-	portalIP   net.IP
-	portalPort int
-	protocol   api.Protocol
-	proxyPort  int
-	socket     proxySocket
-	timeout    time.Duration
+	portalIP   					net.IP
+	portalPort 					int
+	protocol   					api.Protocol
+	proxyPort 					int
+	socket     					proxySocket
+	timeout    					time.Duration
 	// TODO: make this an net.IP address
-	publicIP []string
+	publicIP 					[]string
+	maintainSessionAffinity		bool
+	sessionAffinityType 		api.AffinityType
 }
 
 // How long we wait for a connection to a backend in seconds
@@ -403,10 +405,11 @@ func (proxier *Proxier) addServiceOnPort(service string, protocol api.Protocol, 
 		return nil, err
 	}
 	si := &serviceInfo{
-		proxyPort: portNum,
-		protocol:  protocol,
-		socket:    sock,
-		timeout:   timeout,
+		proxyPort: 					portNum,
+		protocol:  					protocol,
+		socket:    					sock,
+		timeout:   					timeout,
+		maintainSessionAffinity:	false,			//DEFAULT to false
 	}
 	proxier.setServiceInfo(service, si)
 
@@ -436,7 +439,7 @@ func (proxier *Proxier) OnUpdate(services []api.Service) {
 		if exists && info.portalPort == service.Spec.Port && info.portalIP.Equal(serviceIP) {
 			continue
 		}
-		if exists && (info.portalPort != service.Spec.Port || !info.portalIP.Equal(serviceIP) || !ipsEqual(service.Spec.PublicIPs, info.publicIP)) {
+		if exists && (info.portalPort != service.Spec.Port || !info.portalIP.Equal(serviceIP) || service.Spec.CreateExternalLoadBalancer != (len(info.publicIP) > 0)) {
 			glog.V(4).Infof("Something changed for service %q: stopping it", service.Name)
 			err := proxier.closePortal(service.Name, info)
 			if err != nil {
@@ -454,12 +457,23 @@ func (proxier *Proxier) OnUpdate(services []api.Service) {
 			continue
 		}
 		info.portalIP = serviceIP
+		glog.V(4).Infof("service.Name: %s.  info.portalIP: %s", service.Name, serviceIP)
 		info.portalPort = service.Spec.Port
-		info.publicIP = service.Spec.PublicIPs
+		if service.Spec.CreateExternalLoadBalancer {
+			glog.V(4).Infof("service.Spec.PublicIPs: %s", service.Spec.PublicIPs)
+			info.publicIP = service.Spec.PublicIPs
+			if service.Spec.SessionAffinity.Enabled {
+				info.maintainSessionAffinity = true
+				info.sessionAffinityType = service.Spec.SessionAffinity.AffinityType
+			}
+		}
+
 		err = proxier.openPortal(service.Name, info)
 		if err != nil {
 			glog.Errorf("Failed to open portal for %q: %v", service.Name, err)
 		}
+
+		proxier.loadBalancer.NewService(service.Name, info.maintainSessionAffinity, info.sessionAffinityType)
 	}
 	proxier.mu.Lock()
 	defer proxier.mu.Unlock()

@@ -22,6 +22,8 @@ import (
 
 	newer "github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/conversion"
+
+	//"github.com/golang/glog"
 )
 
 func init() {
@@ -418,6 +420,7 @@ func init() {
 			out.ContainerPort = in.Spec.ContainerPort
 			out.PortalIP = in.Spec.PortalIP
 			out.ProxyPort = in.Spec.ProxyPort
+			//glog.Infof("new --> old.\nOLD SERVICE: %v\nNEW SERVICE: %v\n", out, in)
 			return nil
 		},
 		func(in *Service, out *newer.Service, s conversion.Scope) error {
@@ -441,6 +444,10 @@ func init() {
 			out.Spec.ContainerPort = in.ContainerPort
 			out.Spec.PortalIP = in.PortalIP
 			out.Spec.ProxyPort = in.ProxyPort
+			out.Spec.SessionAffinity.Enabled = false
+			out.Spec.SessionAffinity.AffinityType = ""
+			//glog.Infof("old --> new.\nOLD SERVICE: %v\nNEW SERVICE: %v\n", in, out)
+
 			return nil
 		},
 

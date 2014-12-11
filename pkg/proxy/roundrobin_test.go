@@ -18,6 +18,7 @@ package proxy
 
 import (
 	"testing"
+	"net"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 )
@@ -69,7 +70,14 @@ func TestLoadBalanceFailsWithNoEndpoints(t *testing.T) {
 }
 
 func expectEndpoint(t *testing.T, loadBalancer *LoadBalancerRR, service string, expected string) {
-	endpoint, err := loadBalancer.NextEndpoint(service, nil)
+	var netaddr net.Addr = nil
+	if service=="sticky" {
+		addrs, err := net.InterfaceAddrs()
+		if err != nil && len(addrs) != 0{
+			netaddr = addrs[0]
+		}
+	}
+	endpoint, err := loadBalancer.NextEndpoint(service, netaddr)
 	if err != nil {
 		t.Errorf("Didn't find a service for %s, expected %s, failed with: %v", service, expected, err)
 	}
@@ -94,6 +102,26 @@ func TestLoadBalanceWorksWithSingleEndpoint(t *testing.T) {
 	expectEndpoint(t, loadBalancer, "foo", "endpoint1:40")
 	expectEndpoint(t, loadBalancer, "foo", "endpoint1:40")
 	expectEndpoint(t, loadBalancer, "foo", "endpoint1:40")
+}
+
+func TestStickyLoadBalanceWorksWithSingleEndpoint(t *testing.T) {
+	addrs, err := net.InterfaceAddrs()
+	loadBalancer := NewLoadBalancerRR()
+
+	endpoint, err := loadBalancer.NextEndpoint("sticky", addrs[0])
+	if err == nil || len(endpoint) != 0 {
+		t.Errorf("Didn't fail with non-existent service")
+	}
+	endpoints := make([]api.Endpoints, 1)
+	endpoints[0] = api.Endpoints{
+		ObjectMeta: api.ObjectMeta{Name: "sticky"},
+		Endpoints:  []string{"endpoint1:40"},
+	}
+	loadBalancer.OnUpdate(endpoints)
+	expectEndpoint(t, loadBalancer, "sticky", "endpoint1:40")
+	expectEndpoint(t, loadBalancer, "sticky", "endpoint1:40")
+	expectEndpoint(t, loadBalancer, "sticky", "endpoint1:40")
+	expectEndpoint(t, loadBalancer, "sticky", "endpoint1:40")
 }
 
 func TestLoadBalanceWorksWithMultipleEndpoints(t *testing.T) {
