@@ -462,10 +462,12 @@ func (proxier *Proxier) OnUpdate(services []api.Service) {
 		if service.Spec.CreateExternalLoadBalancer {
 			glog.V(4).Infof("service.Spec.PublicIPs: %s", service.Spec.PublicIPs)
 			info.publicIP = service.Spec.PublicIPs
-			if service.Spec.SessionAffinity.Enabled {
+			glog.Infof("service.Spec: %+v", service.Spec)
+			if &service.Spec.SessionAffinity != nil {
 				info.maintainSessionAffinity = true
-				info.sessionAffinityType = service.Spec.SessionAffinity.AffinityType
+				info.sessionAffinityType = *service.Spec.SessionAffinity
 			}
+			glog.Infof("info: %+v", info)
 		}
 
 		err = proxier.openPortal(service.Name, info)

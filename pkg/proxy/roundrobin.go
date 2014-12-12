@@ -93,10 +93,6 @@ func (lb *LoadBalancerRR) NewService(service string, maintainSessionAffinity boo
 
 	if _, exists := lb.serviceDtlMap[service]; !exists {
 		glog.Infof("NewService 2.  Service does not exist.  Let's create it.")
-		//MJF - temp hack until I figure out the api versions issue.
-		if service == "nginx" || service =="tpeservice"{
-			maintainSessionAffinity=true
-		}
 		lb.serviceDtlMap[service] = *newServiceDetail(service, maintainSessionAffinity, sessionAffinityType)
 		glog.Infof("NewService 3.  Service map: %+v", lb.serviceDtlMap[service])
 	}

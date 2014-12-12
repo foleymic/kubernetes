@@ -413,6 +413,16 @@ type ServiceList struct {
 	Items    []Service `json:"items" description:"list of services"`
 }
 
+// Session Affinity Type string
+type AffinityType string
+
+const (
+	// AffinityTypeIP is the Client IP based.
+	AffinityTypeIP AffinityType = "CLIENT-IP"
+	// Cookie is cookie based.
+	//Cookie AffinityType = "COOKIE"		//Reserved for future use.
+)
+
 // Service is a named abstraction of software service (for example, mysql) consisting of local port
 // (for example 3306) that the proxy listens on, and the selector that determines which pods
 // will answer requests sent through the proxy.
@@ -446,6 +456,9 @@ type Service struct {
 
 	// ProxyPort is assigned by the master.  If specified by the user it will be ignored.
 	ProxyPort int `json:"proxyPort,omitempty" description:"if non-zero, a pre-allocated host port used for this service by the proxy on each node; assigned by the master and ignored on input"`
+
+	// Maintain Session Affinity.  Note that currently we only support client IP based
+	SessionAffinity *AffinityType `json:"sessionAffinity,omitempty" description:"enable client IP based session affinity; must be CLIENT-IP; Disabled if unspecified"`
 }
 
 // Endpoints is a collection of endpoints that implement the actual service, for example:

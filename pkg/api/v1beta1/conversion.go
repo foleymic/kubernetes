@@ -420,6 +420,9 @@ func init() {
 			out.ContainerPort = in.Spec.ContainerPort
 			out.PortalIP = in.Spec.PortalIP
 			out.ProxyPort = in.Spec.ProxyPort
+			if err := s.Convert(&in.Spec.SessionAffinity, &out.SessionAffinity, 0); err != nil {
+				return err
+			}
 			//glog.Infof("new --> old.\nOLD SERVICE: %v\nNEW SERVICE: %v\n", out, in)
 			return nil
 		},
@@ -444,8 +447,9 @@ func init() {
 			out.Spec.ContainerPort = in.ContainerPort
 			out.Spec.PortalIP = in.PortalIP
 			out.Spec.ProxyPort = in.ProxyPort
-			out.Spec.SessionAffinity.Enabled = false
-			out.Spec.SessionAffinity.AffinityType = ""
+			if err := s.Convert(&in.SessionAffinity, &out.Spec.SessionAffinity, 0); err != nil {
+				return err
+			}
 			//glog.Infof("old --> new.\nOLD SERVICE: %v\nNEW SERVICE: %v\n", in, out)
 
 			return nil

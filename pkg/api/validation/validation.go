@@ -419,13 +419,7 @@ func ValidatePodUpdate(newPod, oldPod *api.Pod) errs.ValidationErrorList {
 	return allErrs
 }
 
-func validateSessionAffinity(sessionAffinity *api.SessionAffinity) errs.ValidationErrorList {
-	allErrors := errs.ValidationErrorList{}
-	if sessionAffinity.Enabled == true {
-		sessionAffinity.AffinityType = "CLIENT-IP"
-	}
-	return allErrors
-}
+var supportedSessionAffinityType = util.NewStringSet(string(api.AffinityTypeIP))
 
 // ValidateService tests if required fields in the service are set.
 func ValidateService(service *api.Service, lister ServiceLister, ctx api.Context) errs.ValidationErrorList {
@@ -467,7 +461,11 @@ func ValidateService(service *api.Service, lister ServiceLister, ctx api.Context
 			}
 		}
 	}
-	allErrs = append(allErrs, validateSessionAffinity(&service.Spec.SessionAffinity).Prefix("sessionAffinity")...)
+	if &service.Spec.SessionAffinity != nil {
+		if !supportedSessionAffinityType.Has(strings.ToUpper(string(&service.Spec.SessionAffinity))) {
+			allErrs = append(allErrs, errs.NewFieldNotSupported("spec.sessionAffinity", service.Spec.SessionAffinity))
+		}
+	}
 
 	return allErrs
 }
