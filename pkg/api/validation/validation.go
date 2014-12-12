@@ -26,6 +26,7 @@ import (
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/capabilities"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
+	"github.com/golang/glog"
 )
 
 // ServiceLister is an abstract interface for testing.
@@ -461,8 +462,10 @@ func ValidateService(service *api.Service, lister ServiceLister, ctx api.Context
 			}
 		}
 	}
-	if &service.Spec.SessionAffinity != nil {
-		if !supportedSessionAffinityType.Has(strings.ToUpper(string(&service.Spec.SessionAffinity))) {
+	if service.Spec.SessionAffinity != nil {
+		s := strings.ToUpper(string(*service.Spec.SessionAffinity))
+		glog.Infof("*service.Spec.SessionAffinity: %+v", s)
+		if !supportedSessionAffinityType.Has(strings.ToUpper(string(*service.Spec.SessionAffinity))) {
 			allErrs = append(allErrs, errs.NewFieldNotSupported("spec.sessionAffinity", service.Spec.SessionAffinity))
 		}
 	}

@@ -15,10 +15,10 @@
 # limitations under the License.
 
 # TODO(jbeda): Provide a way to override project
-ZONE=us-central1-b
+ZONE=us-central1-a
 MASTER_SIZE=n1-standard-1
 MINION_SIZE=n1-standard-1
-NUM_MINIONS=4
+NUM_MINIONS=1
 # TODO(dchen1107): Filed an internal issue to create an alias
 # for containervm image, so that gcloud will expand this
 # to the latest supported image.

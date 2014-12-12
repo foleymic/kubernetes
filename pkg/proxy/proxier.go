@@ -463,7 +463,7 @@ func (proxier *Proxier) OnUpdate(services []api.Service) {
 			glog.V(4).Infof("service.Spec.PublicIPs: %s", service.Spec.PublicIPs)
 			info.publicIP = service.Spec.PublicIPs
 			glog.Infof("service.Spec: %+v", service.Spec)
-			if &service.Spec.SessionAffinity != nil {
+			if service.Spec.SessionAffinity != nil {
 				info.maintainSessionAffinity = true
 				info.sessionAffinityType = *service.Spec.SessionAffinity
 			}
