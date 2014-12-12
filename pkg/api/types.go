@@ -588,15 +588,8 @@ const (
 	// AffinityTypeIP is the Client IP based.
 	AffinityTypeIP AffinityType = "CLIENT-IP"
 	// Cookie is cookie based.
-	Cookie AffinityType = "COOKIE"
+	//Cookie AffinityType = "COOKIE"		//Reserved for future use.
 )
-
-// SessionAffinity - allows for sticky session load balanceing
-type SessionAffinity struct {
-	Enabled bool `json:"enabled" yaml:"enabled"`
-	// Required: If specified, this must be a either CLIENT-IP or COOKIE
-	AffinityType AffinityType `json:"affinityType" yaml:"affinityType"`
-}
 
 // ServiceStatus represents the current status of a service
 type ServiceStatus struct{}
@@ -634,7 +627,7 @@ type ServiceSpec struct {
 	ContainerPort util.IntOrString `json:"containerPort,omitempty"`
 
 	// Maintain Session Affinity.  Note that currently we only support client IP based
-	SessionAffinity SessionAffinity `json:"sessionAffinity,omitempty" yaml:"sessionAffinity,omitempty"`
+	SessionAffinity *AffinityType `json:"sessionAffinity,omitempty"`
 }
 
 // Service is a named abstraction of software service (for example, mysql) consisting of local port

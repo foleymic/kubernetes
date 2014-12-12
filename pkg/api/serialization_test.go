@@ -137,7 +137,7 @@ var apiObjectFuzzer = fuzz.New().NilChance(.5).NumElements(1, 1).Funcs(
 		}
 	},
 	func(j *api.AffinityType, c fuzz.Continue) {
-		types := []api.AffinityType{api.AffinityTypeIP, api.Cookie}
+		types := []api.AffinityType{api.AffinityTypeIP /*, api.Cookie*/}
 		*j = types[c.Rand.Intn(len(types))]
 	},
 	func(j *api.ServiceSpec, c fuzz.Continue) {
@@ -148,9 +148,6 @@ var apiObjectFuzzer = fuzz.New().NilChance(.5).NumElements(1, 1).Funcs(
 		j.PortalIP = "127.0.0.1"
 		j.ProxyPort = int(c.RandUint64())
 		j.CreateExternalLoadBalancer = c.RandBool()
-		//PublicIPs []string `json:"publicIPs,omitempty" yaml:"publicIPs,omitempty"`
-		//j.ContainerPort.IntVal = 0
-		//j.ContainerPort.StrVal = c.RandString()
 	},
 )
 

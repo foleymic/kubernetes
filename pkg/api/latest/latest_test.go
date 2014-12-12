@@ -140,7 +140,6 @@ var apiObjectFuzzer = fuzz.New().NilChance(.5).NumElements(1, 1).Funcs(
 		j.PortalIP = "127.0.0.1"
 		j.ProxyPort = int(c.RandUint64())
 		j.CreateExternalLoadBalancer = c.RandBool()
-		//PublicIPs []string `json:"publicIPs,omitempty" yaml:"publicIPs,omitempty"`
 		j.ContainerPort.IntVal = 0
 		j.ContainerPort.StrVal = c.RandString()
 	},
