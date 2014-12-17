@@ -342,6 +342,7 @@ func (proxier *Proxier) SyncLoop() {
 				glog.Errorf("Failed to ensure iptables: %v", err)
 			}
 			proxier.ensurePortals()
+			proxier.cleanupStaleStickySessions()
 		}
 	}
 }
@@ -355,6 +356,17 @@ func (proxier *Proxier) ensurePortals() {
 		err := proxier.openPortal(name, info)
 		if err != nil {
 			glog.Errorf("Failed to ensure portal for %q: %v", name, err)
+		}
+	}
+}
+
+// Ensure that portals exist for all services.
+func (proxier *Proxier) cleanupStaleStickySessions() {
+	// TODO: paramaterize this in the types api file as an attribute of sticky session.   For now it's hardcoded to 3 hours.
+	var stickyMaxAgeMinutes int = 180
+	for name, info := range proxier.serviceMap {
+		if info.sessionAffinityType != api.AffinityTypeNone {
+			proxier.loadBalancer.CleanupStaleStickySessions(name, stickyMaxAgeMinutes)
 		}
 	}
 }

@@ -27,4 +27,5 @@ type LoadBalancer interface {
 	// service and source address.
 	NextEndpoint(service string, srcAddr net.Addr) (string, error)
 	NewService(service string, sessionAffinityType api.AffinityType) error
+	CleanupStaleStickySessions(service string, stickyMaxAgeMinutes int)
 }

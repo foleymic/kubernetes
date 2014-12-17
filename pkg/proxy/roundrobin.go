@@ -34,10 +34,11 @@ var (
 )
 
 type sessionAffinityDetail struct {
-	ipAddress     string
-	sessionCookie string
-	endpoint      string
-	lastUsedDTTM  time.Time
+	clientIPAddress string
+	clientProtocol  api.Protocol //not yet used
+	sessionCookie   string       //not yet used
+	endpoint        string
+	lastUsedDTTM    time.Time
 }
 
 type serviceDetail struct {
@@ -106,6 +107,7 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 		if exists && time.Now().Sub(sessionAffinity.lastUsedDTTM).Minutes() < 30 {
 			endpoint := sessionAffinity.endpoint
 			sessionAffinity.lastUsedDTTM = time.Now()
+			lb.serviceDtlMap[service].sessionAffinityMap[ipaddr] = sessionAffinity
 			glog.V(4).Infof("NextEndpoint.  Key: %s. sessionAffinity: %+v", ipaddr, sessionAffinity)
 			return endpoint, nil
 		}
@@ -118,7 +120,7 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 		affinity, _ := lb.serviceDtlMap[service].sessionAffinityMap[ipaddr]
 		affinity.lastUsedDTTM = time.Now()
 		affinity.endpoint = endpoint
-		affinity.ipAddress = ipaddr
+		affinity.clientIPAddress = ipaddr
 
 		lb.serviceDtlMap[service].sessionAffinityMap[ipaddr] = affinity
 		glog.V(4).Infof("NextEndpoint. New Affinity key %s: %+v", ipaddr, lb.serviceDtlMap[service].sessionAffinityMap[ipaddr])
@@ -152,9 +154,10 @@ func filterValidEndpoints(endpoints []string) []string {
 }
 
 func removeSessionAffinityByEndpoint(lb *LoadBalancerRR, service string, endpoint string) {
-	for _, seshAffinDtl := range lb.serviceDtlMap[service].sessionAffinityMap {
-		if seshAffinDtl.endpoint == endpoint {
-			delete(lb.serviceDtlMap[service].sessionAffinityMap, seshAffinDtl.ipAddress)
+	for _, affinityDetail := range lb.serviceDtlMap[service].sessionAffinityMap {
+		if affinityDetail.endpoint == endpoint {
+			glog.V(4).Infof("Removing client: %s from sessionAffinityMap for service: %s", affinityDetail.endpoint, service)
+			delete(lb.serviceDtlMap[service].sessionAffinityMap, affinityDetail.clientIPAddress)
 		}
 	}
 }
@@ -204,6 +207,15 @@ func (lb *LoadBalancerRR) OnUpdate(endpoints []api.Endpoints) {
 			glog.V(3).Infof("LoadBalancerRR: Removing endpoints for %s -> %+v", k, v)
 			delete(lb.endpointsMap, k)
 			delete(lb.serviceDtlMap, k)
+		}
+	}
+}
+
+func (lb *LoadBalancerRR) CleanupStaleStickySessions(service string, stickyMaxAgeMinutes int) {
+	for key, affinityDetail := range lb.serviceDtlMap[service].sessionAffinityMap {
+		if int(time.Now().Sub(affinityDetail.lastUsedDTTM).Minutes()) >= stickyMaxAgeMinutes {
+			glog.V(4).Infof("Removing client: %s from sessionAffinityMap for service: %s.  Last used is greater than %d minutes....", affinityDetail.clientIPAddress, service, stickyMaxAgeMinutes)
+			delete(lb.serviceDtlMap[service].sessionAffinityMap, key)
 		}
 	}
 }
