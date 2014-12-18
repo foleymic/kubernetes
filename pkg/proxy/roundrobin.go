@@ -44,8 +44,8 @@ type sessionAffinityDetail struct {
 type serviceDetail struct {
 	name                string
 	sessionAffinityType api.AffinityType
-	sessionAffinityMap  map[string]sessionAffinityDetail
-	stickyMaxAgeMinutes	int
+	sessionAffinityMap  map[string]*sessionAffinityDetail
+	stickyMaxAgeMinutes int
 }
 
 // LoadBalancerRR is a round-robin load balancer.
@@ -60,7 +60,7 @@ func newServiceDetail(service string, sessionAffinityType api.AffinityType, stic
 	return &serviceDetail{
 		name:                service,
 		sessionAffinityType: sessionAffinityType,
-		sessionAffinityMap:  make(map[string]sessionAffinityDetail),
+		sessionAffinityMap:  make(map[string]*sessionAffinityDetail),
 		stickyMaxAgeMinutes: stickyMaxAgeMinutes,
 	}
 }
@@ -76,7 +76,7 @@ func NewLoadBalancerRR() *LoadBalancerRR {
 
 func (lb *LoadBalancerRR) NewService(service string, sessionAffinityType api.AffinityType, stickyMaxAgeMinutes int) error {
 	if stickyMaxAgeMinutes == 0 {
-		stickyMaxAgeMinutes = 180	//default to 3 hours if not specified.  Should 0 be unlimeted instead????
+		stickyMaxAgeMinutes = 180 //default to 3 hours if not specified.  Should 0 be unlimeted instead????
 	}
 	if _, exists := lb.serviceDtlMap[service]; !exists {
 		lb.serviceDtlMap[service] = *newServiceDetail(service, sessionAffinityType, stickyMaxAgeMinutes)
@@ -88,7 +88,7 @@ func (lb *LoadBalancerRR) NewService(service string, sessionAffinityType api.Aff
 // return true if this service detail is using some form of session affinity.
 func isSessionAffinity(serviceDtl serviceDetail) bool {
 	//Should never be empty string, but chekcing for it to be safe.
-	if serviceDtl.sessionAffinityType == "" || serviceDtl.sessionAffinityType == api.AffinityTypeNone{
+	if serviceDtl.sessionAffinityType == "" || serviceDtl.sessionAffinityType == api.AffinityTypeNone {
 		return false
 	}
 	return true
@@ -104,7 +104,6 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 	serviceDtls, exists := lb.serviceDtlMap[service]
 	endpoints, _ := lb.endpointsMap[service]
 	index := lb.rrIndex[service]
-
 	sessionAffinityEnabled := isSessionAffinity(serviceDtls)
 	lb.lock.RUnlock()
 	if !exists {
@@ -118,11 +117,10 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 			ipaddr, _, _ = net.SplitHostPort(srcAddr.String())
 		}
 		sessionAffinity, exists := serviceDtls.sessionAffinityMap[ipaddr]
-		glog.V(4).Infof("NextEndpoint.  Key: %s. sessionAffinity: %+v\n", ipaddr, sessionAffinity)
+		glog.V(4).Infof("NextEndpoint.  Key: %s. sessionAffinity: %+v", ipaddr, sessionAffinity)
 		if exists && int(time.Now().Sub(sessionAffinity.lastUsedDTTM).Minutes()) < serviceDtls.stickyMaxAgeMinutes {
 			endpoint := sessionAffinity.endpoint
 			sessionAffinity.lastUsedDTTM = time.Now()
-			lb.serviceDtlMap[service].sessionAffinityMap[ipaddr] = sessionAffinity
 			glog.V(4).Infof("NextEndpoint.  Key: %s. sessionAffinity: %+v", ipaddr, sessionAffinity)
 			return endpoint, nil
 		}
@@ -132,12 +130,16 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 	lb.rrIndex[service] = (index + 1) % len(endpoints)
 
 	if sessionAffinityEnabled {
-		affinity, _ := lb.serviceDtlMap[service].sessionAffinityMap[ipaddr]
+		var affinity *sessionAffinityDetail
+		affinity, _ = lb.serviceDtlMap[service].sessionAffinityMap[ipaddr]
+		if affinity == nil {
+			affinity = new(sessionAffinityDetail) //&sessionAffinityDetail{ipaddr, "TCP", "", endpoint, time.Now()}
+			lb.serviceDtlMap[service].sessionAffinityMap[ipaddr] = affinity
+		}
 		affinity.lastUsedDTTM = time.Now()
 		affinity.endpoint = endpoint
 		affinity.clientIPAddress = ipaddr
 
-		lb.serviceDtlMap[service].sessionAffinityMap[ipaddr] = affinity
 		glog.V(4).Infof("NextEndpoint. New Affinity key %s: %+v", ipaddr, lb.serviceDtlMap[service].sessionAffinityMap[ipaddr])
 	}
 

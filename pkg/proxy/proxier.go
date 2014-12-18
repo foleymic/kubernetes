@@ -41,7 +41,7 @@ type serviceInfo struct {
 	// TODO: make this an net.IP address
 	publicIP            []string
 	sessionAffinityType api.AffinityType
-	stickyMaxAgeMinutes	int
+	stickyMaxAgeMinutes int
 }
 
 // How long we wait for a connection to a backend in seconds
