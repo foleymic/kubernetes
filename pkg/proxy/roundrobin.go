@@ -45,6 +45,7 @@ type serviceDetail struct {
 	name                string
 	sessionAffinityType api.AffinityType
 	sessionAffinityMap  map[string]sessionAffinityDetail
+	stickyMaxAgeMinutes	int
 }
 
 // LoadBalancerRR is a round-robin load balancer.
@@ -55,11 +56,12 @@ type LoadBalancerRR struct {
 	serviceDtlMap map[string]serviceDetail
 }
 
-func newServiceDetail(service string, sessionAffinityType api.AffinityType) *serviceDetail {
+func newServiceDetail(service string, sessionAffinityType api.AffinityType, stickyMaxAgeMinutes int) *serviceDetail {
 	return &serviceDetail{
 		name:                service,
 		sessionAffinityType: sessionAffinityType,
 		sessionAffinityMap:  make(map[string]sessionAffinityDetail),
+		stickyMaxAgeMinutes: stickyMaxAgeMinutes,
 	}
 }
 
@@ -72,12 +74,24 @@ func NewLoadBalancerRR() *LoadBalancerRR {
 	}
 }
 
-func (lb *LoadBalancerRR) NewService(service string, sessionAffinityType api.AffinityType) error {
+func (lb *LoadBalancerRR) NewService(service string, sessionAffinityType api.AffinityType, stickyMaxAgeMinutes int) error {
+	if stickyMaxAgeMinutes == 0 {
+		stickyMaxAgeMinutes = 180	//default to 3 hours if not specified.  Should 0 be unlimeted instead????
+	}
 	if _, exists := lb.serviceDtlMap[service]; !exists {
-		lb.serviceDtlMap[service] = *newServiceDetail(service, sessionAffinityType)
+		lb.serviceDtlMap[service] = *newServiceDetail(service, sessionAffinityType, stickyMaxAgeMinutes)
 		glog.V(4).Infof("NewService.  Service does not exist.  So I created it: %+v", lb.serviceDtlMap[service])
 	}
 	return nil
+}
+
+// return true if this service detail is using some form of session affinity.
+func isSessionAffinity(serviceDtl serviceDetail) bool {
+	//Should never be empty string, but chekcing for it to be safe.
+	if serviceDtl.sessionAffinityType == "" || serviceDtl.sessionAffinityType == api.AffinityTypeNone{
+		return false
+	}
+	return true
 }
 
 // NextEndpoint returns a service endpoint.
@@ -91,6 +105,7 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 	endpoints, _ := lb.endpointsMap[service]
 	index := lb.rrIndex[service]
 
+	sessionAffinityEnabled := isSessionAffinity(serviceDtls)
 	lb.lock.RUnlock()
 	if !exists {
 		return "", ErrMissingServiceEntry
@@ -98,13 +113,13 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 	if len(endpoints) == 0 {
 		return "", ErrMissingEndpoints
 	}
-	if serviceDtls.sessionAffinityType != api.AffinityTypeNone {
+	if sessionAffinityEnabled {
 		if _, _, err := net.SplitHostPort(srcAddr.String()); err == nil {
 			ipaddr, _, _ = net.SplitHostPort(srcAddr.String())
 		}
 		sessionAffinity, exists := serviceDtls.sessionAffinityMap[ipaddr]
 		glog.V(4).Infof("NextEndpoint.  Key: %s. sessionAffinity: %+v\n", ipaddr, sessionAffinity)
-		if exists && time.Now().Sub(sessionAffinity.lastUsedDTTM).Minutes() < 30 {
+		if exists && int(time.Now().Sub(sessionAffinity.lastUsedDTTM).Minutes()) < serviceDtls.stickyMaxAgeMinutes {
 			endpoint := sessionAffinity.endpoint
 			sessionAffinity.lastUsedDTTM = time.Now()
 			lb.serviceDtlMap[service].sessionAffinityMap[ipaddr] = sessionAffinity
@@ -116,7 +131,7 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 	lb.lock.Lock()
 	lb.rrIndex[service] = (index + 1) % len(endpoints)
 
-	if serviceDtls.sessionAffinityType != api.AffinityTypeNone {
+	if sessionAffinityEnabled {
 		affinity, _ := lb.serviceDtlMap[service].sessionAffinityMap[ipaddr]
 		affinity.lastUsedDTTM = time.Now()
 		affinity.endpoint = endpoint
@@ -127,7 +142,7 @@ func (lb *LoadBalancerRR) NextEndpoint(service string, srcAddr net.Addr) (string
 	}
 
 	lb.lock.Unlock()
-	glog.V(4).Infof("NextEndpoint 16. Service Detail Map for %s: %+v", service, lb.serviceDtlMap[service])
+	glog.V(4).Infof("NextEndpoint. Service Detail Map for %s: %+v", service, lb.serviceDtlMap[service])
 	return endpoint, nil
 }
 
@@ -153,6 +168,7 @@ func filterValidEndpoints(endpoints []string) []string {
 	return result
 }
 
+//remove any session affinity records associated to a particular endpoint (for example when a pod goes down).
 func removeSessionAffinityByEndpoint(lb *LoadBalancerRR, service string, endpoint string) {
 	for _, affinityDetail := range lb.serviceDtlMap[service].sessionAffinityMap {
 		if affinityDetail.endpoint == endpoint {
@@ -162,15 +178,17 @@ func removeSessionAffinityByEndpoint(lb *LoadBalancerRR, service string, endpoin
 	}
 }
 
+//Loop through the valid endpoints and then the endpoints associated with the Load Balancer.
+// 	Then remove any session affinity records that are not in both lists.
 func updateServiceDetailMap(lb *LoadBalancerRR, service string, validEndpoints []string) {
-	m := map[string]int{}
-	for _, s1Val := range validEndpoints {
-		m[s1Val] = 1
+	allEndpoints := map[string]int{}
+	for _, validEndpoint := range validEndpoints {
+		allEndpoints[validEndpoint] = 1
 	}
-	for _, s2Val := range lb.endpointsMap[service] {
-		m[s2Val] = m[s2Val] + 1
+	for _, existingEndpoint := range lb.endpointsMap[service] {
+		allEndpoints[existingEndpoint] = allEndpoints[existingEndpoint] + 1
 	}
-	for mKey, mVal := range m {
+	for mKey, mVal := range allEndpoints {
 		if mVal == 1 {
 			glog.V(3).Infof("Delete endpoint %s for service: %s", mKey, service)
 			removeSessionAffinityByEndpoint(lb, service, mKey)
@@ -193,7 +211,10 @@ func (lb *LoadBalancerRR) OnUpdate(endpoints []api.Endpoints) {
 		if !exists || !reflect.DeepEqual(existingEndpoints, validEndpoints) {
 			glog.V(3).Infof("LoadBalancerRR: Setting endpoints for %s to %+v", endpoint.Name, endpoint.Endpoints)
 			updateServiceDetailMap(lb, endpoint.Name, validEndpoints)
-			lb.NewService(endpoint.Name, api.AffinityTypeNone) //This is just a catch all in case any existing flows did not create the new service before getting to this point.
+			// On update can be called without NewService being called externally.
+			// to be safe we will call it here.  A new service will only be created
+			// if one does not already exist.
+			lb.NewService(endpoint.Name, api.AffinityTypeNone, 0)
 			lb.endpointsMap[endpoint.Name] = validEndpoints
 
 			// Reset the round-robin index.
@@ -211,7 +232,8 @@ func (lb *LoadBalancerRR) OnUpdate(endpoints []api.Endpoints) {
 	}
 }
 
-func (lb *LoadBalancerRR) CleanupStaleStickySessions(service string, stickyMaxAgeMinutes int) {
+func (lb *LoadBalancerRR) CleanupStaleStickySessions(service string) {
+	stickyMaxAgeMinutes := lb.serviceDtlMap[service].stickyMaxAgeMinutes
 	for key, affinityDetail := range lb.serviceDtlMap[service].sessionAffinityMap {
 		if int(time.Now().Sub(affinityDetail.lastUsedDTTM).Minutes()) >= stickyMaxAgeMinutes {
 			glog.V(4).Infof("Removing client: %s from sessionAffinityMap for service: %s.  Last used is greater than %d minutes....", affinityDetail.clientIPAddress, service, stickyMaxAgeMinutes)

@@ -212,6 +212,7 @@ func translateAffinityType(affinityType api.AffinityType) GCEAffinityType {
 	case api.AffinityTypeNone:
 		return GCEAffinityTypeNone
 	default:
+		glog.Errorf("unexpected affinity type: %v", affinityType)
 		return GCEAffinityTypeNone
 	}
 }
